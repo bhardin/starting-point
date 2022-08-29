@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Web service
+  web:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: edgar-web
+    # '/start' is the shell script used to run the service
+    command: /start
+    # this volume is used to map the files and folders on the host to the container
+    # so if we change code on the host, code in the docker container will also be changed
+    volumes:
+      - .:/app
+    ports:
+      - 8010:8000
+    # env_file is used to manage the env variables of our project
+    env_file:
+      - ./.env
+    depends_on:
+      - redis
+      - db
+
+  # Storage
+  db:
+    image: postgres:14-alpine
+    volumes:
+      - edgar_db_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust" # DO NOT RUN IN PROD LIKE THIS
+      # POSTGRES_DB: db_name_change_me
+      # POSTGRES_USER: db_user_change_me
+      # POSTGRES_PASSWORD: db_password_change_me
+
+      # Celery Message Broker and Result Backend
+  redis:
+    image: redis:7-alpine
+
+  # Worker Code
+  celery_worker:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: edgar-worker
+    command: /start-celeryworker
+    volumes:
+      - .:/app
+    env_file:
+      - ./.env
+    depends_on:
+      - redis
+      - db
+
+  # Scheduled Worker Code
+  celery_beat:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: edgar-beat
+    command: /start-celerybeat
+    volumes:
+      - .:/app
+    env_file:
+      - ./.env
+    depends_on:
+      - redis
+      - db
+
+  # Inspection Interface (webapp)
+  flower:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: edgar-flower
+    command: /start-flower
+    volumes:
+      - .:/app
+    env_file:
+      - ./.env
+    ports:
+      - 5557:5555
+    depends_on:
+      - redis
+      - db
+
+volumes:
+  edgar_db_data:
